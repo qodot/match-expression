@@ -7,6 +7,7 @@ A Python implementation of TypeScript's [ts-pattern](https://github.com/gvergnau
 - **Chainable API**: Intuitive `match(value).case(pattern, then).exhaustive()` syntax
 - **Type-safe**: Full type inference support with pyright/mypy
 - **Exhaustiveness checking**: Ensures all cases are handled at compile time
+- **Tuple patterns**: Match against compound patterns like `(Dog, Car)` or `("success", 200)`
 - **Zero dependencies**: Lightweight and fast
 - **Pythonic**: Leverages Python 3.12+ type system features
 
@@ -94,6 +95,61 @@ def handle_result(result: Success | Error) -> str:
     )
 ```
 
+### Tuple Pattern Matching
+
+Match against tuple values with compound patterns:
+
+```python
+from typing import Literal
+from match_expression import match
+
+class Dog:
+    def speak(self) -> str:
+        return "Woof!"
+
+class Cat:
+    def speak(self) -> str:
+        return "Meow!"
+
+class Car:
+    def drive(self) -> str:
+        return "Vroom!"
+
+class Bike:
+    def ride(self) -> str:
+        return "Pedaling!"
+
+def handle_pair(pair: tuple[Dog | Cat, Car | Bike]) -> str:
+    return (
+        match(pair)
+        .case((Dog, Car), lambda d, c: f"{d.speak()} {c.drive()}")
+        .case((Dog, Bike), lambda d, b: f"{d.speak()} {b.ride()}")
+        .case((Cat, Car), lambda c, car: f"{c.speak()} {car.drive()}")
+        .case((Cat, Bike), lambda c, b: f"{c.speak()} {b.ride()}")
+        .exhaustive()
+    )
+
+# Multi-argument lambdas receive unpacked tuple elements
+handle_pair((Dog(), Car()))  # "Woof! Vroom!"
+```
+
+You can also mix literals and types in tuple patterns:
+
+```python
+type Status = Literal["success", "error"]
+type Platform = Literal["web", "mobile"]
+
+def handle_response(response: tuple[Status, Platform]) -> str:
+    return (
+        match(response)
+        .case(("success", "web"), "Web success!")
+        .case(("success", "mobile"), "Mobile success!")
+        .case(("error", "web"), "Web error!")
+        .case(("error", "mobile"), "Mobile error!")
+        .exhaustive()
+    )
+```
+
 ### Using `otherwise` for Default Cases
 
 ```python
@@ -162,8 +218,8 @@ Starts a pattern matching chain.
 ### `.case(pattern: P, then: R) -> Case[V, P, R]`
 Matches against a pattern. If the pattern matches, executes `then`.
 
-- `pattern`: A value to match against (for literals) or a type (for isinstance checks)
-- `then`: The value to return or a function to execute with the matched value
+- `pattern`: A value to match against (for literals), a type (for isinstance checks), or a tuple of patterns
+- `then`: The value to return or a function to execute with the matched value. For tuple patterns, multi-argument lambdas receive unpacked elements.
 
 ### `.exhaustive(eval: bool = True) -> R`
 Ensures all cases are handled. Raises `ExhaustiveError` if not all cases are covered.
