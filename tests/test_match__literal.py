@@ -60,22 +60,22 @@ def test_literal_match_with_otherwise() -> None:
 
 def test_literal_match__returns_class_without_instantiation() -> None:
     platform: Platform = "instagram"
-    
+
     result = (
         match(platform)
-        .case("instagram", InstagramManager) 
+        .case("instagram", InstagramManager)
         .case("tiktok", TiktokManager)
         .case("youtube", YoutubeManager)
         .exhaustive()
     )
-    
+
     assert result is InstagramManager
     assert not isinstance(result, InstagramManager)
 
 
 def test_literal_match__no_eval_exhaustive() -> None:
     platform: Platform = "instagram"
-    
+
     result = (
         match(platform)
         .case("instagram", lambda: "IG")
@@ -83,7 +83,7 @@ def test_literal_match__no_eval_exhaustive() -> None:
         .case("youtube", lambda: "YT")
         .exhaustive(eval=False)
     )
-    
+
     # Should return the lambda function itself, not its result
     assert callable(result)
     assert result() == "IG"
@@ -91,14 +91,14 @@ def test_literal_match__no_eval_exhaustive() -> None:
 
 def test_literal_match__no_eval_otherwise() -> None:
     platform: Platform = "youtube"
-    
+
     result = (
         match(platform)
         .case("instagram", lambda: "IG")
         .case("tiktok", lambda: "TT")
         .otherwise(lambda: "Other", eval=False)
     )
-    
+
     # Should return the default lambda function itself
     assert callable(result)
-    assert result() == "Other"  
+    assert result() == "Other"
