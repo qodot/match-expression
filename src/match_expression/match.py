@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import inspect
 from enum import Enum
-from typing import Any, Callable, Literal, TypeGuard, overload
+from typing import Any, Callable, Literal, overload
+
+from .error import ExhaustiveError
+from .helper import unwrap
 
 PRIMITIVE_TYPES = (int, float, str, bool, bytes, type(None))
-COLLECTION_TYPES = (list, tuple, dict, set, frozenset)
-BUILTIN_TYPES = PRIMITIVE_TYPES + COLLECTION_TYPES
 
 
 class Match[V]:
@@ -60,20 +60,8 @@ class Match[V]:
         pattern: P | type[P],
         then: R | Callable[[P], R] | Callable[[], R],
     ) -> Case[V, P, R]:
-        if isinstance(pattern, type):
-            matched = isinstance(self.value, pattern)
-        else:
-            if type(pattern) in PRIMITIVE_TYPES or isinstance(pattern, Enum):
-                # Primitive type matching
-                matched = self.value == pattern
-            elif type(pattern) in COLLECTION_TYPES:
-                # Collection type matching
-                matched = False  # TODO: implement collection matching
-            else:
-                # Custom type matching
-                matched = type(pattern) is type(self.value)
-
-        return Case(self.value, then, matched) 
+        matched = _check_match(self.value, pattern)
+        return Case(self.value, then, matched)
 
 
 class Case[V, P, R]:
@@ -134,20 +122,8 @@ class Case[V, P, R]:
         if self.matched:
             return self
 
-        if isinstance(pattern, type):
-            matched = isinstance(self.value, pattern)
-        else:
-            if type(pattern) in PRIMITIVE_TYPES or isinstance(pattern, Enum):
-                # Primitive type matching
-                matched = self.value == pattern
-            elif type(pattern) in COLLECTION_TYPES:
-                # Collection type matching
-                matched = False  # TODO: implement collection matching
-            else:
-                # Custom type matching
-                matched = type(pattern) is type(self.value)
-
-        return Case(self.value, then, matched) 
+        matched = _check_match(self.value, pattern)
+        return Case(self.value, then, matched)
 
     @overload
     def exhaustive(self) -> R: ...
@@ -164,7 +140,7 @@ class Case[V, P, R]:
         if not self.matched:
             raise ExhaustiveError(self.value)
         if eval:
-            return _unwrap(self.value, self.then)
+            return unwrap(self.value, self.then)
         else:
             return self.then
 
@@ -195,7 +171,7 @@ class Case[V, P, R]:
     ) -> R | UR | Callable[[P], R] | Callable[[], R | UR]:
         if self.matched:
             if eval:
-                return _unwrap(self.value, self.then)
+                return unwrap(self.value, self.then)
             else:
                 return self.then
         if eval and callable(default):
@@ -207,40 +183,27 @@ def match[V](value: V) -> Match[V]:
     return Match[V](value)
 
 
-def _is_not_callable[V, R](
-    value: R | Callable[[V], R] | Callable[[], R],
-) -> TypeGuard[R]:
-    return not callable(value)
-
-
-def _is_class[R](value: Callable[..., R]) -> TypeGuard[type[R]]:
-    return inspect.isclass(value)
-
-
-def _is_no_arg_callable[V, R](
-    func: Callable[[], R] | Callable[[V], R],
-) -> TypeGuard[Callable[[], R]]:
-    sig = inspect.signature(func)
-    return len(sig.parameters) == 0
-
-
-def _unwrap[V, R](
-    value: V,
-    then: R | Callable[[V], R] | Callable[[], R],
-) -> R:
-    if _is_not_callable(then):
-        return then
-
-    if _is_class(then):
-        return then 
-
-    if _is_no_arg_callable(then):
-        return then()
+def _check_match(value: Any, pattern: Any) -> bool:
+    if isinstance(pattern, type):
+        return isinstance(value, pattern)
+    elif isinstance(pattern, tuple):
+        return _match_tuple(value, pattern)
     else:
-        return then(value)
+        return _match_element(value, pattern)
 
 
-class ExhaustiveError(Exception):
-    def __init__(self, value: Any) -> None:
-        super().__init__(f"Non-exhaustive match. Unhandled value: {value}")
-        self.value = value
+def _match_tuple(value: Any, pattern: tuple[Any, ...]) -> bool:
+    if not isinstance(value, tuple):
+        return False
+    if len(value) != len(pattern):
+        return False
+    return all(_match_element(v, p) for v, p in zip(value, pattern))
+
+
+def _match_element(value: Any, pattern: Any) -> bool:
+    if isinstance(pattern, type):
+        return isinstance(value, pattern)
+    elif type(pattern) in PRIMITIVE_TYPES or isinstance(pattern, Enum):
+        return value == pattern
+    else:
+        return type(value) is type(pattern)
